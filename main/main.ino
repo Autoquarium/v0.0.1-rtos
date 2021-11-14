@@ -1,6 +1,17 @@
 #include <Arduino.h>
+#include <Preferences.h>
 
-// semaphores for subcribed MQTT cmds - USE BINARY SEMAPHORES BECAUSE WE ARE TRIGGERING ANOTHER TASK TO RUN
+#include "deps/Menu.h"              /* cli and firsttime setup */
+#include "DFRobot_ESP_PH.h"    /* pH sensor lib */
+#include "deps/ir_interface.cpp"    /* low food reading */
+#include "deps/Servo_interface.h"   /* moving servo */
+#include "deps/LED_Array.h"         /* led lighting control */ 
+#include "deps/lcd.h"               /* LCD screen control */
+#include "deps/fish_mqtt.h"         /* WiFi, MQTT, and Notifications */
+#include "deps/tempSensor.h"        /* water temp sensor lib */
+
+
+// semaphores for subscribed MQTT cmds - USE BINARY SEMAPHORES BECAUSE WE ARE TRIGGERING ANOTHER TASK TO RUN
 SemaphoreHandle_t feed_semaphore;
 SemaphoreHandle_t led_semaphore;
 SemaphoreHandle_t setting_semaphore;
@@ -8,10 +19,66 @@ SemaphoreHandle_t setting_semaphore;
 // mutex for CMD_PAYLOAD - USE MUTEX BECAUSE ITS A SHARED RESOURCE - https://stackoverflow.com/questions/62814/difference-between-binary-semaphore-and-mutex
 SemaphoreHandle_t payload_mutex;
 
+// setting variables - loaded from memory / set in CLI or web app
+long gmtOffset_sec;
+int num_of_fish;
+bool dynamic_lighting;
+bool send_alert;
 
-// MQTT parameters
-int publish_interval = 1; // in minutes
+// Danger cutoof values
+const int MAX_TEMP  = 90;
+const int MIN_TEMP = 70;
+const int MAX_PH = 9;
+const int MIN_PH = 3;
+
+// pH sensor
+const float ESPADC = 4096.0;   //the esp Analog Digital Convertion value
+const int ESPVOLTAGE = 3300; //the esp voltage supply value
+const int PH_PIN = 35;    //pH sensor gpio pin
+DFRobot_ESP_PH ph;
+
+// LCD pins
+const int TFT_DC = 17;
+const int TFT_CS = 15;
+const int TFT_RST = 5;
+const int TFT_MISO = 19;         
+const int TFT_MOSI = 23;           
+const int TFT_CLK = 18; 
+LCD lcd;
+TempSensor temperature;
+
+// ir sensor
+const int IR_PIN = 34; //TODO change to ESP pins
+const int LED_PIN = 26; //TODO change to ESP pins
+const int IR_THRESHOLD = 50; //TODO change to reflect values in enclosure
+ir_sensor ir;
+
+//Temperature chip
+int DS18S20_Pin = 4; //DS18S20 Signal pin on digital 2
+
+// servo
+const int SERVO_PIN = 32;
+const int DELAY_BETWEEN_ROTATION = 1000;
+const int MIN_FEED_INTERVAL = 1200;
+Servo_Interface si;
+int previous_feed_time = -1;
+
+// LED array
+LED_Array leds;
+
+// MQTT, WiFi and notification
+FishMqtt wiqtt;
+int publish_interval; // in minutes
 char CMD_PAYLOAD[30];
+
+//function prototypes
+void userSetup();
+void load_settings();
+void dangerValueCheck( float tempVal, float pHVal, int foodLevel );
+
+
+
+
 
 
 // MAIN TASKS
@@ -28,6 +95,7 @@ void keepWifiConnected( void * parameter ){
     Serial.println("checking wifi connection");
   }
 }
+
 
 void checkIncomingCmds( void * parameter ){
   // keep track of last wake
@@ -48,6 +116,7 @@ void checkIncomingCmds( void * parameter ){
   } 
 }
 
+
 void publishSensorVals( void * parameter ) {
   portTickType xLastWakeTime;
 
@@ -63,8 +132,6 @@ void publishSensorVals( void * parameter ) {
     }
 }
 
-
-
 // CMD TASKS - these tasks are triggered inside the callback function
 void feedCmdTask( void *pvParameters ) {
   for ( ;; ) {
@@ -74,6 +141,7 @@ void feedCmdTask( void *pvParameters ) {
   }
 }
 
+
 void ledCmdTask( void *pvParameters ) {
   for ( ;; ) {
     xSemaphoreTake(led_semaphore, portMAX_DELAY);
@@ -82,6 +150,7 @@ void ledCmdTask( void *pvParameters ) {
   }
 }
 
+
 void settingCmdTask( void *pvParameters ) {
   for ( ;; ) {
     xSemaphoreTake(setting_semaphore, portMAX_DELAY);
@@ -89,7 +158,6 @@ void settingCmdTask( void *pvParameters ) {
     // TODO: add code to change settings
   }
 }
-
 
 
 /**
@@ -206,12 +274,108 @@ void setup() {
   led_semaphore = xSemaphoreCreateBinary();
   setting_semaphore = xSemaphoreCreateBinary();
   payload_mutex = xSemaphoreCreateMutex();
+  
+  // init ph sensor
+  ph.init(PH_PIN, ESPADC, ESPVOLTAGE);
+  ph.begin();
+
+
+  // init temp sensor
+  temperature.init(DS18S20_Pin);  
+
+  // init ir sensor
+  ir.init(IR_PIN, LED_PIN, IR_THRESHOLD);
+
+  // init servo
+  si.init(SERVO_PIN);
+
+  // init LEDs
+  leds.init(200);
+
+  // init LCD
+  lcd.init(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
+    
+  // check if connected to computer
+  userSetup();
+
+  // init wifi and MQTT
+  wiqtt.connectToWifi();
+  wiqtt.setupMQTT();
+  wiqtt.setCallback(callback); 
 
   // create tasks
   Serial.println("Creating Tasks");
   taskCreation();
 }
 
+
 void loop() {
   
+}
+
+
+void load_settings() {
+
+  Preferences preferences;
+  // recover saved wifi password
+  preferences.begin("saved-values", false);
+  String wifi_SSID = preferences.getString("wifi_SSID", "no value"); 
+  String wifi_PWD = preferences.getString("wifi_PWD", "no value");
+  //wimqtt.setWifiCreds(wifi_SSID, wifi_PWD);
+
+  // recover saved Alert username
+  String alert_usr = preferences.getString("alert_usr", "no value");
+  //wimqtt.setAlertCreds(alert_usr);
+
+  // recover saved timezone value
+  gmtOffset_sec = preferences.getInt("time_zone", -5)*60*60;
+  
+  // recvoer saved setting
+  publish_interval = preferences.getInt("publish_interval", 2);
+  num_of_fish = preferences.getInt("num_of_fish", 3);
+  dynamic_lighting = preferences.getBool("dynamic_lighting", false);
+  send_alert = preferences.getBool("send_alert", false);
+  
+  preferences.end();  
+}
+
+
+void userSetup() {
+  Serial.setTimeout(500);
+  Menu me;
+  me.loop();
+  //Serial.setTimeout(); // back to default value 
+}
+
+
+void dangerValueCheck(float tempVal, float pHVal, int foodLevel ) {
+
+    String msg;
+
+    // water tempurature value check
+    if (tempVal >= MAX_TEMP) {
+        msg = "High water temperature detected. Measured value: " + String(tempVal) + " deg-F";
+        wiqtt.sendPushAlert(msg);
+    }
+    else if (tempVal <= MIN_TEMP) {
+        msg = "Low water temperature detected. Measured value: " + String(tempVal) + " deg-F";
+        wiqtt.sendPushAlert(msg);
+    }
+    
+    // pH value check
+    if (pHVal >= MAX_PH) {
+        msg = "High water pH detected. Measured value: " + String(pHVal);
+        wiqtt.sendPushAlert(msg);
+    }
+    else if (pHVal <= MIN_PH) {
+        msg = "Low water pH detected. Measured value: " + String(pHVal);
+        wiqtt.sendPushAlert(msg);
+    }
+    
+    // food level check
+    if (foodLevel == 0) {
+        msg = "Low food level detected, refill food hopper";
+        wiqtt.sendPushAlert(msg);
+    }
+    return;
 }
