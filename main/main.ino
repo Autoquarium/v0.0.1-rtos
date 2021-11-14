@@ -77,10 +77,6 @@ void load_settings();
 void dangerValueCheck( float tempVal, float pHVal, int foodLevel );
 
 
-
-
-
-
 // MAIN TASKS
 void keepWifiConnected( void * parameter ){
   // keep track of last wake
@@ -95,7 +91,6 @@ void keepWifiConnected( void * parameter ){
     Serial.println("checking wifi connection");
   }
 }
-
 
 void checkIncomingCmds( void * parameter ){
   // keep track of last wake
@@ -274,7 +269,9 @@ void setup() {
   led_semaphore = xSemaphoreCreateBinary();
   setting_semaphore = xSemaphoreCreateBinary();
   payload_mutex = xSemaphoreCreateMutex();
-  
+
+  load_settings();
+
   // init ph sensor
   ph.init(PH_PIN, ESPADC, ESPVOLTAGE);
   ph.begin();
