@@ -20,6 +20,7 @@ SemaphoreHandle_t setting_semaphore;
 SemaphoreHandle_t payload_mutex;
 
 // setting variables - loaded from memory / set in CLI or web app
+Preferences preferences;
 long gmtOffset_sec;
 int num_of_fish;
 bool dynamic_lighting;
@@ -77,6 +78,10 @@ void load_settings();
 void dangerValueCheck( float tempVal, float pHVal, int foodLevel );
 
 
+// task handlers
+TaskHandle_t dynamicLEDTask;
+
+
 // MAIN TASKS
 void keepWifiConnected( void * parameter ){
   // keep track of last wake
@@ -112,7 +117,7 @@ void checkIncomingCmds( void * parameter ){
 void publishSensorVals( void * parameter ) {
   portTickType xLastWakeTime;
 
-  // convert publish internal into ms
+  // convert publish interval from minutes into ms
   int delay_in_ms = publish_interval * 60 * 1000;
   portTickType xPeriod = ( delay_in_ms / portTICK_RATE_MS );
   xLastWakeTime = xTaskGetTickCount ();
@@ -134,6 +139,26 @@ void publishSensorVals( void * parameter ) {
 
     }
 }
+
+
+void dynamicLightingChange( void * parameter ) {
+  int delay_in_ms = 30* 60 * 1000; // 30 minutes to ms
+  portTickType xPeriod = ( delay_in_ms / portTICK_RATE_MS );
+  xLastWakeTime = xTaskGetTickCount ();
+
+  for( ;; ) {
+
+    Serial.println("Dynamic lighting change");
+
+    // getTime
+    // leds.updateDynamicColor(time)
+
+    vTaskDelayUntil( &xLastWakeTime, xPeriod );
+    }
+
+
+}
+
 
 // CMD TASKS - these tasks are triggered inside the callback function
 void feedCmdTask( void *pvParameters ) {
@@ -159,6 +184,20 @@ void settingCmdTask( void *pvParameters ) {
     xSemaphoreTake(setting_semaphore, portMAX_DELAY);
     Serial.println("change application settings");
     // TODO: add code to change settings
+
+
+    // if enable dynamic lighting:
+    // vTaskResume( dynamicLEDTask )
+
+    // Save new setting values back to memory
+    /*
+      preferences.begin("saved-values", false);
+      publish_interval = preferences.getInt("publish_interval", 2);
+      num_of_fish = preferences.getInt("num_of_fish", 3);
+      dynamic_lighting = preferences.getBool("dynamic_lighting", false);
+      send_alert = preferences.getBool("send_alert", false);
+      preferences.end();
+    */
   }
 }
 
@@ -265,7 +304,27 @@ void taskCreation() {
     1, // not time sensitive
     NULL,
     1
-    );                             
+    );
+
+  xTaskCreatePinnedToCore(
+    dynamicLightingChange,
+    "updates color",
+    10000,
+    NULL,
+    1, // not time sensitive
+    &dynamicLEDTask,
+    1
+    );
+
+
+  // suspend the dynamic lighting task until dynamic lighting is enabled by the user
+  if (!dynamic_lighting) {
+    vTaskSuspend(dynamicLEDTask)
+  }
+
+    
+
+
 }
 
 
@@ -321,7 +380,6 @@ void loop() {
 
 void load_settings() {
 
-  Preferences preferences;
   // recover saved wifi password
   preferences.begin("saved-values", false);
   String wifi_SSID = preferences.getString("wifi_SSID", "no value"); 
@@ -341,7 +399,7 @@ void load_settings() {
   dynamic_lighting = preferences.getBool("dynamic_lighting", false);
   send_alert = preferences.getBool("send_alert", false);
   
-  preferences.end();  
+  preferences.end();
 }
 
 
