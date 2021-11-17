@@ -82,8 +82,8 @@ void keepWifiConnected( void * parameter ){
   // keep track of last wake
   portTickType xLastWakeTime;
 
-  // set delay period (5 seconds)
-  portTickType xPeriod = ( 5000 / portTICK_RATE_MS );
+  // set delay period (50 seconds)
+  portTickType xPeriod = ( 50000 / portTICK_RATE_MS );
   xLastWakeTime = xTaskGetTickCount ();
   
   for(;;){
@@ -97,8 +97,8 @@ void checkIncomingCmds( void * parameter ){
   // keep track of last wake
   portTickType xLastWakeTime;
 
-  // set delay period (2 seconds)
-  portTickType xPeriod = ( 2000 / portTICK_RATE_MS );
+  // set delay period (4 seconds)
+  portTickType xPeriod = ( 4000 / portTICK_RATE_MS );
   xLastWakeTime = xTaskGetTickCount ();
   
   for(;;){
@@ -129,7 +129,7 @@ void publishSensorVals( void * parameter ) {
     float pH_read = 7.65;
 
     // publish data
-    wiqtt.publishSensorVals(temp_read, pH_read);
+    wiqtt.publishSensorVals(temp_read, pH_read, 900);
 
 
     }
@@ -212,7 +212,7 @@ void taskCreation() {
     "publish sensor vals",
     10000,
     NULL,
-    1, // this task is NOT vital for correct system operation
+    2, // this task is NOT vital for correct system operation
     NULL,
     1
     );                             
@@ -242,7 +242,7 @@ void taskCreation() {
     "triggers the servo motors",
     10000,
     NULL,
-    0, // not time sensitive
+    1, // not time sensitive
     NULL,
     1
     );                             
@@ -252,7 +252,7 @@ void taskCreation() {
     "changes LED color",
     10000,
     NULL,
-    0, // not time sensitive
+    1, // not time sensitive
     NULL,
     1
     );                             
@@ -262,7 +262,7 @@ void taskCreation() {
     "changes settings",
     10000,
     NULL,
-    0, // not time sensitive
+    1, // not time sensitive
     NULL,
     1
     );                             
@@ -326,11 +326,11 @@ void load_settings() {
   preferences.begin("saved-values", false);
   String wifi_SSID = preferences.getString("wifi_SSID", "no value"); 
   String wifi_PWD = preferences.getString("wifi_PWD", "no value");
-  //wimqtt.setWifiCreds(wifi_SSID, wifi_PWD);
+  wiqtt.setWifiCreds(wifi_SSID, wifi_PWD);
 
   // recover saved Alert username
   String alert_usr = preferences.getString("alert_usr", "no value");
-  //wimqtt.setAlertCreds(alert_usr);
+  wiqtt.setAlertCreds(alert_usr);
 
   // recover saved timezone value
   gmtOffset_sec = preferences.getInt("time_zone", -5)*60*60;

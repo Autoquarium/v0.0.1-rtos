@@ -47,11 +47,11 @@ public:
 	 * @param SSID_in The name of the WiFi network to connect to
 	 * @param PWD_in The password of the WiFi network to connect to
 	 */
-	void setWifiCreds(char *SSID_in, char *PWD_in) {
-  
-		if (strlen(SSID_in) <= 40 && strlen(PWD_in) <= 40) {
-			strcpy(wifi_SSID, SSID_in);
-			strcpy(wifi_PWD, PWD_in);	
+	void setWifiCreds(String SSID_in, String PWD_in) {
+
+		if (SSID_in.length() <= 40 && PWD_in.length() <= 40) {
+			SSID_in.toCharArray(wifi_SSID, SSID_in.length() + 1);
+			PWD_in.toCharArray(wifi_PWD, PWD_in.length() + 1);
 		} else {
 			Serial.println("[ERROR] Could not set wiFi SSID or password");
 		}
@@ -89,7 +89,7 @@ public:
 	 * 
 	 */
 	void checkWificonnection() {
-		if (!WiFi.status() != WL_CONNECTED) {
+		if (WiFi.status() != WL_CONNECTED) {
 			Serial.print("Connection was lost");
 			connectToWifi();
 		}
