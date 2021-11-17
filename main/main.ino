@@ -20,7 +20,6 @@ SemaphoreHandle_t setting_semaphore;
 SemaphoreHandle_t payload_mutex;
 
 // setting variables - loaded from memory / set in CLI or web app
-Preferences preferences;
 long gmtOffset_sec;
 int num_of_fish;
 bool dynamic_lighting;
@@ -142,6 +141,8 @@ void publishSensorVals( void * parameter ) {
 
 
 void dynamicLightingChange( void * parameter ) {
+  portTickType xLastWakeTime;
+  
   int delay_in_ms = 30* 60 * 1000; // 30 minutes to ms
   portTickType xPeriod = ( delay_in_ms / portTICK_RATE_MS );
   xLastWakeTime = xTaskGetTickCount ();
@@ -319,7 +320,7 @@ void taskCreation() {
 
   // suspend the dynamic lighting task until dynamic lighting is enabled by the user
   if (!dynamic_lighting) {
-    vTaskSuspend(dynamicLEDTask)
+    vTaskSuspend(dynamicLEDTask);
   }
 
     
@@ -380,6 +381,7 @@ void loop() {
 
 void load_settings() {
 
+  Preferences preferences;
   // recover saved wifi password
   preferences.begin("saved-values", false);
   String wifi_SSID = preferences.getString("wifi_SSID", "no value"); 
