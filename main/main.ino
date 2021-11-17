@@ -89,6 +89,7 @@ void keepWifiConnected( void * parameter ){
   for(;;){
     vTaskDelayUntil( &xLastWakeTime, xPeriod ); // run every 5 seconds
     Serial.println("checking wifi connection");
+    wiqtt.checkWificonnection();
   }
 }
 
@@ -96,18 +97,14 @@ void checkIncomingCmds( void * parameter ){
   // keep track of last wake
   portTickType xLastWakeTime;
 
-  // set delay period (7 seconds)
-  portTickType xPeriod = ( 7000 / portTICK_RATE_MS );
+  // set delay period (2 seconds)
+  portTickType xPeriod = ( 2000 / portTICK_RATE_MS );
   xLastWakeTime = xTaskGetTickCount ();
   
   for(;;){
     vTaskDelayUntil( &xLastWakeTime, xPeriod ); // run every 5 seconds
     Serial.println("calling wiqtt.loop()");
-
-    // if callback, give semaphore to needed operations:
-    //  - move servo
-    //  - change LED color/brightness
-    //  - setting chnages (autoled, notifications, autofeed) 
+    wiqtt.loop(); // triggers callback if needed
   } 
 }
 
@@ -124,6 +121,17 @@ void publishSensorVals( void * parameter ) {
     // Wait for the next cycle.
     vTaskDelayUntil( &xLastWakeTime, xPeriod );
     Serial.println("Publishing new sensor values to broker");
+
+    // get water Temp
+    float temp_read = 80.1;
+
+    // get pH value
+    float pH_read = 7.65;
+
+    // publish data
+    wiqtt.publishSensorVals(temp_read, pH_read);
+
+
     }
 }
 

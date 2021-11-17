@@ -84,6 +84,17 @@ public:
 	}
 
 
+	/**
+	 * @brief Checks wifi connection and reconnects if needed
+	 * 
+	 */
+	void checkWificonnection() {
+		if (!WiFi.status() != WL_CONNECTED) {
+			Serial.print("Connection was lost");
+			connectToWifi();
+		}
+	}
+
 
 	/**
 	 * @brief Connects the MQTT broker specified in the setServer() call
@@ -91,7 +102,7 @@ public:
 	 *
 	 */
 	void MQTTreconnect() {
-	  Serial.println("Connecting to MQTT Broker...");
+	  Serial.println("Checking MQTT Broker connection");
 	  while (!connected()) {
 	      Serial.println("Reconnecting to MQTT Broker..");
 	      if (connect(clientName, usrname, password)) {
