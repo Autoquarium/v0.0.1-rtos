@@ -2,7 +2,7 @@
 #include <Preferences.h>
 
 #include "deps/Menu.h"              /* cli and firsttime setup */
-#include "DFRobot_ESP_PH.h"    /* pH sensor lib */
+#include "DFRobot_ESP_PH.h"         /* pH sensor lib */
 #include "deps/ir_interface.cpp"    /* low food reading */
 #include "deps/Servo_interface.h"   /* moving servo */
 #include "deps/LED_Array.h"         /* led lighting control */ 
@@ -16,7 +16,8 @@ SemaphoreHandle_t feed_semaphore;
 SemaphoreHandle_t led_semaphore;
 SemaphoreHandle_t setting_semaphore;
 
-// mutex for CMD_PAYLOAD - USE MUTEX BECAUSE ITS A SHARED RESOURCE - https://stackoverflow.com/questions/62814/difference-between-binary-semaphore-and-mutex
+// mutex for CMD_PAYLOAD - USE MUTEX BECAUSE ITS A SHARED RESOURCE:
+// https://stackoverflow.com/questions/62814/difference-between-binary-semaphore-and-mutex
 SemaphoreHandle_t payload_mutex;
 
 // setting variables - loaded from memory / set in CLI or web app
@@ -29,7 +30,7 @@ bool send_alert;
 const int MAX_TEMP  = 90;
 const int MIN_TEMP = 70;
 const int MAX_PH = 9;
-const int MIN_PH = 3;
+const int MIN_PH = 4;
 
 // pH sensor
 const float ESPADC = 4096.0;   //the esp Analog Digital Convertion value
@@ -133,17 +134,15 @@ void publishSensorVals( void * parameter ) {
     float pH_read = 7.65;
 
     // publish data
-    wiqtt.publishSensorVals(temp_read, pH_read, 900);
-
-
-    }
+    wiqtt.publishSensorVals(temp_read, pH_read, 900); // add time
+  }
 }
 
 
 void dynamicLightingChange( void * parameter ) {
   portTickType xLastWakeTime;
   
-  int delay_in_ms = 30* 60 * 1000; // 30 minutes to ms
+  int delay_in_ms = 10* 60 * 1000; // 10 minutes to ms
   portTickType xPeriod = ( delay_in_ms / portTICK_RATE_MS );
   xLastWakeTime = xTaskGetTickCount ();
 
@@ -322,10 +321,6 @@ void taskCreation() {
   if (!dynamic_lighting) {
     vTaskSuspend(dynamicLEDTask);
   }
-
-    
-
-
 }
 
 
